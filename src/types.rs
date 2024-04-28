@@ -82,3 +82,26 @@ where
     pub tags: Option<Vec<String>>,
     pub state: State<T>,
 }
+
+// implement the Default trait for TaskRun
+impl<T> Default for TaskRun<T>
+where
+    T: serde::Serialize + std::clone::Clone + std::fmt::Debug,
+{
+    fn default() -> Self {
+        TaskRun {
+            id: None,
+            name: "".to_string(),
+            flow_run_id: None,
+            task_key: "".to_string(),
+            dynamic_key: "".to_string(),
+            cache_key: None,
+            cache_expiration: None,
+            empirical_policy: None,
+            task_inputs: None,
+            task_version: None,
+            tags: None,
+            state: State::new(StateType::Pending),
+        }
+    }
+}

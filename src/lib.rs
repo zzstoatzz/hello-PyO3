@@ -22,21 +22,14 @@ fn create_state_dict<'py>(py: Python<'py>, state: &State<String>) -> PyResult<&'
 
 #[pyfunction]
 fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<PyObject> {
-    let task_name = func.getattr(py, "__name__")?;
+    let task_name: String = func.getattr(py, "__name__")?.extract(py).unwrap();
     let mut state = State::<String>::new(StateType::Pending);
     let task_run_create = TaskRun {
-        id: None,
-        name: task_name.to_string(),
-        flow_run_id: None,
-        task_key: "example_task_key".to_string(),
-        dynamic_key: task_name.to_string(),
-        cache_key: None,
-        cache_expiration: None,
-        task_version: None,
-        empirical_policy: None,
-        tags: None,
-        task_inputs: None,
+        name: task_name.clone(),
+        dynamic_key: task_name.clone(),
+        task_key: task_name.clone(),
         state: state.clone(),
+        ..TaskRun::default()
     };
 
     let client = PrefectClient::new();
@@ -44,13 +37,13 @@ fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Optio
         Ok(task_run) => task_run,
         Err(e) => {
             let error_message = format!("Failed to submit task run: {}", e);
-            println!("{}", error_message);
+            println!("{}\n", error_message);
             state.state_type = StateType::Crashed;
             return Ok(create_state_dict(py, &state)?.into_py(py));
         }
     };
 
-    println!("Running function: {}", task_name);
+    println!("Running function: {}\n", task_name);
     state.state_type = StateType::Running;
     if let Err(e) = client.set_task_run_state(&task_run, &state) {
         let error_message = format!("Failed to set task run state: {}", e);
@@ -77,7 +70,7 @@ fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Optio
 
     if let Err(e) = client.set_task_run_state(&task_run, &state) {
         let error_message = format!("Failed to set task run state: {}", e);
-        state.state_type = StateType::Failed;
+        state.state_type = StateType::Crashed;
         state.set_message(error_message);
         return Ok(create_state_dict(py, &state)?.into_py(py));
     }

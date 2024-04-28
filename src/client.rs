@@ -35,7 +35,7 @@ impl PrefectClient {
     {
         let url = format!("{}/task_runs/", self.base_url);
 
-        println!("Creating task run: url={}, payload={:?}", url, task_run);
+        println!("Creating task run: url={}, payload={:?}\n", url, task_run);
         let response = self.client.post(&url)
             .json(task_run)
             .send()?;
@@ -76,7 +76,7 @@ impl PrefectClient {
         if let Some(task_run_id) = &task_run.id {
             let url = format!("{}/task_runs/{}/state/", self.base_url, task_run_id);
             // debug print the URL and payload
-            println!("Setting task run state: url={}, payload={:?}", url, state);
+            println!("Setting task run state: url={}, payload={:?}\n", url, state);
             let response = self.client.post(&url)
                 .json(state)
                 .send();
