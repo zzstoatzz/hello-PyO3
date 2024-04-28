@@ -43,7 +43,7 @@ fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Optio
         }
     };
 
-    println!("Running function: {}\n", task_name);
+    println!("Running function: {} with parameters: {:?}\n", task_name, args);
     state.state_type = StateType::Running;
     if let Err(e) = client.set_task_run_state(&task_run, &state) {
         let error_message = format!("Failed to set task run state: {}", e);
