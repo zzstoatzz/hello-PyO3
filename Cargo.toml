@@ -9,7 +9,7 @@ name = "reeefect"
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.82"
+openssl = { version = "0.10.64", features = ["vendored"] }
 pyo3 = "0.20.0"
 reqwest = { version = "0.12.2", features = ["blocking", "json"] }
 serde = { version = "1.0.104", features = ["derive"] }
