@@ -5,17 +5,31 @@ mod types;
 use client::PrefectClient;
 use types::{State, StateType, TaskRun};
 
+fn create_state_dict<'py>(py: Python<'py>, state: &State<String>) -> PyResult<&'py PyDict> {
+    let state_dict = PyDict::new(py);
+    state_dict.set_item("type", state.state_type.to_string())?;
+    if let Some(name) = &state.name {
+        state_dict.set_item("name", name)?;
+    }
+    if let Some(data) = &state.data {
+        state_dict.set_item("data", data)?;
+    }
+    if let Some(message) = &state.message {
+        state_dict.set_item("message", message)?;
+    }
+    Ok(state_dict)
+}
+
 #[pyfunction]
 fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<PyObject> {
     let task_name = func.getattr(py, "__name__")?;
-    let mut state = State::new(StateType::Pending);
-
+    let mut state = State::<String>::new(StateType::Pending);
     let task_run_create = TaskRun {
         id: None,
         name: task_name.to_string(),
         flow_run_id: None,
         task_key: "example_task_key".to_string(),
-        dynamic_key: "example_dynamic_key".to_string(),
+        dynamic_key: task_name.to_string(),
         cache_key: None,
         cache_expiration: None,
         task_version: None,
@@ -29,33 +43,31 @@ fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Optio
     let task_run = match client.create_task_run(&task_run_create) {
         Ok(task_run) => task_run,
         Err(e) => {
-            state.state_type = StateType::Failed;
-            state.set_message(format!("Failed to create task run: {}", e));
-            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to create task run: {}", e)));
+            let error_message = format!("Failed to submit task run: {}", e);
+            println!("{}", error_message);
+            state.state_type = StateType::Crashed;
+            return Ok(create_state_dict(py, &state)?.into_py(py));
         }
     };
 
-    // print the name of the function and that it was moved into Running state
     println!("Running function: {}", task_name);
-
-    // Update the state to Running
     state.state_type = StateType::Running;
     if let Err(e) = client.set_task_run_state(&task_run, &state) {
+        let error_message = format!("Failed to set task run state: {}", e);
         state.state_type = StateType::Failed;
-        state.set_message(format!("Failed to set task run state: {}", e));
+        state.set_message(error_message);
+        return Ok(create_state_dict(py, &state)?.into_py(py));
     }
 
-    // Execute the Python function
     let result = match kwargs {
         Some(kwargs) => func.call(py, args, Some(kwargs)),
         None => func.call(py, args, None),
     };
 
-    // Check the result and update the state accordingly
     match result {
-        Ok(_res) => {
+        Ok(res) => {
             state.state_type = StateType::Completed;
-            state.set_data(task_run.state.data.unwrap_or_default());
+            state.set_data(res.to_string());
         }
         Err(e) => {
             state.state_type = StateType::Failed;
@@ -63,30 +75,19 @@ fn run_python_function(py: Python, func: PyObject, args: &PyTuple, kwargs: Optio
         }
     }
 
-    // Set the final task run state
     if let Err(e) = client.set_task_run_state(&task_run, &state) {
+        let error_message = format!("Failed to set task run state: {}", e);
         state.state_type = StateType::Failed;
-        state.set_message(format!("Failed to set task run state: {}", e));
+        state.set_message(error_message);
+        return Ok(create_state_dict(py, &state)?.into_py(py));
     }
 
-    // Create a Python dictionary to represent the state
-    let state_dict = PyDict::new(py);
-    state_dict.set_item("type", state.state_type.to_string())?;
-    if let Some(name) = &state.name {
-        state_dict.set_item("name", name)?;
-    }
-    if let Some(data) = &state.data {
-        state_dict.set_item("data", data)?;
-    }
-    if let Some(message) = &state.message {
-        state_dict.set_item("message", message)?;
-    }
-
-    Ok(state_dict.into())
+    Ok(create_state_dict(py, &state)?.into_py(py))
 }
 
 #[pymodule]
 fn reeefect(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_python_function, m)?)?;
     Ok(())
+
 }

@@ -1,6 +1,8 @@
 use std::env;
+use std::io::{Error, ErrorKind};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use crate::types::{State, TaskRun};
+
 
 pub struct PrefectClient {
     client: reqwest::blocking::Client,
@@ -27,47 +29,63 @@ impl PrefectClient {
         }
     }
 
-    pub fn create_task_run<T>(&self, payload: &TaskRun<T>) -> Result<TaskRun<T>, reqwest::Error>
+    pub fn create_task_run<T>(&self, task_run: &TaskRun<T>) -> Result<TaskRun<T>, reqwest::Error>
     where
         T: serde::Serialize + std::clone::Clone + std::fmt::Debug,
     {
         let url = format!("{}/task_runs/", self.base_url);
 
-        // debug print the URL and payload
-        println!("Creating task run: url={}, payload={:?}", url, payload);
-
+        println!("Creating task run: url={}, payload={:?}", url, task_run);
         let response = self.client.post(&url)
-            .json(payload)
+            .json(task_run)
             .send()?;
-
-        let whatever: String = response.text()?;
-        Ok(TaskRun {
-            id: Some(whatever),
-            name: payload.name.clone(),
-            flow_run_id: payload.flow_run_id.clone(),
-            task_key: payload.task_key.clone(),
-            dynamic_key: payload.dynamic_key.clone(),
-            cache_key: payload.cache_key.clone(),
-            cache_expiration: payload.cache_expiration.clone(),
-            task_version: payload.task_version.clone(),
-            empirical_policy: payload.empirical_policy.clone(),
-            tags: payload.tags.clone(),
-            task_inputs: payload.task_inputs.clone(),
-            state: payload.state.clone(),
-        })
+    
+        // Check if the response is a 200 OK
+        if response.status().is_success() {
+            let json_response: serde_json::Value = response.json()?;
+    
+            let task_run_id = json_response["id"].as_str().unwrap_or_default().to_string();
+    
+            Ok(TaskRun {
+                id: Some(task_run_id),
+                name: task_run.name.clone(),
+                flow_run_id: task_run.flow_run_id.clone(),
+                task_key: task_run.task_key.clone(),
+                dynamic_key: task_run.dynamic_key.clone(),
+                cache_key: task_run.cache_key.clone(),
+                cache_expiration: task_run.cache_expiration.clone(),
+                task_version: task_run.task_version.clone(),
+                empirical_policy: task_run.empirical_policy.clone(),
+                tags: task_run.tags.clone(),
+                task_inputs: task_run.task_inputs.clone(),
+                state: task_run.state.clone(),
+            })
+        } else {
+            // If the response is not a 200 OK, return an error
+            let error_message = format!("Could not create task run. Status code: {}", response.status());
+            println!("{}", error_message);
+            Err(reqwest::Error::from(response.error_for_status().unwrap_err()))
+        }
     }
 
-    pub fn set_task_run_state(&self, task_run: &TaskRun<()>, state: &State<()>) -> Result<(), reqwest::Error> {
-        let url = format!("{}/task_runs/{:?}/state/", self.base_url, task_run.id);
-
-        // debug print the URL and payload
-        println!("Setting task run state: url={}, payload={:?}", url, state);
-
-        let response = self.client.post(&url)
-            .json(state)
-            .send()?;
-
-        let _whatever: String = response.text()?;
-        Ok(())
+    
+    pub fn set_task_run_state<T>(&self, task_run: &TaskRun<T>, state: &State<T>) -> Result<String, Error>
+    where
+        T: serde::Serialize + std::clone::Clone + std::fmt::Debug,
+    {
+        if let Some(task_run_id) = &task_run.id {
+            let url = format!("{}/task_runs/{}/state/", self.base_url, task_run_id);
+            // debug print the URL and payload
+            println!("Setting task run state: url={}, payload={:?}", url, state);
+            let response = self.client.post(&url)
+                .json(state)
+                .send();
+            let result: String = response.unwrap().text().unwrap();
+            Ok(result)
+        } else {
+            let error_message = "Cannot set task run state: task_run.id is None".to_string();
+            println!("{}", error_message);
+            Err(Error::new(ErrorKind::InvalidData, error_message))
+        }
     }
 }
