@@ -1,7 +1,7 @@
 use crate::types::{OrchestrationResult, State, TaskRun};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::{blocking::Client, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt;
 
@@ -77,6 +77,7 @@ impl PrefectClient {
     }
 
     pub fn create_task_run(&self, task_run: &TaskRun) -> Result<TaskRun, PrefectClientError> {
+        println!("Creating task run {:#?}", task_run);
         let url = format!("{}/task_runs/", self.base_url);
         let response = self.client.post(url).json(task_run).send();
         self.handle_response(response)
@@ -87,6 +88,7 @@ impl PrefectClient {
         task_run: &TaskRun,
         state: &State,
     ) -> Result<OrchestrationResult, PrefectClientError> {
+        println!("Setting task run state to {:#?}", state.state_type);
         if let Some(task_run_id) = &task_run.id {
             let url = format!("{}/task_runs/{}/set_state/", self.base_url, task_run_id);
             let payload = serde_json::json!({
